@@ -1,10 +1,7 @@
 import pygame
 import math
 import streamlit as st
-
-# Streamlit setup
-st.title("2D Soccer Shooter")
-st.write("Use W/A/S/D & Arrow keys to move. F & Right Shift to shoot.")
+import time
 
 # Initialize pygame
 pygame.init()
@@ -19,9 +16,10 @@ BULLET_SPEED = 6
 MAX_BULLETS = 6
 GOAL_WIDTH = 100
 GOAL_HEIGHT = 120
+HEALTH = 100
 BALL_SPEED = 3
 BULLET_LIFETIME = 50
-WIN_SCORE = 5
+WINNING_SCORE = 5
 
 # Colors
 WHITE = (255, 255, 255)
@@ -31,15 +29,10 @@ BLUE = (0, 0, 255)
 BLACK = (0, 0, 0)
 YELLOW = (255, 255, 0)
 
-# Create screen
+# Pygame setup
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("2D Soccer Shooter")
-
-# Score variables
-score_p1, score_p2 = 0, 0
-
-def bullet_distance(bullet):
-    return math.hypot(bullet[0] - bullet[5], bullet[1] - bullet[6])
+clock = pygame.time.Clock()
 
 # Player Class
 class Player:
@@ -48,8 +41,10 @@ class Player:
         self.color = color
         self.bullets = []
         self.controls = controls
+        self.health = HEALTH
         self.angle = 0
         self.reload = 0
+        self.score = 0
 
     def move(self, keys):
         if keys[self.controls['up']] and self.y > 0:
@@ -71,15 +66,14 @@ class Player:
             rad = math.radians(self.angle)
             vx = BULLET_SPEED * math.cos(rad)
             vy = BULLET_SPEED * math.sin(rad)
-            self.bullets.append([self.x, self.y, vx, vy, BULLET_LIFETIME, self.x, self.y])
+            self.bullets.append([self.x, self.y, vx, vy, BULLET_LIFETIME])
             self.reload = 20
 
     def update_bullets(self):
         for bullet in self.bullets[:]:
-            bullet[0] += bullet[2]  # Move X
-            bullet[1] += bullet[3]  # Move Y
-            bullet[4] -= 1  # Reduce lifespan
-
+            bullet[0] += bullet[2]
+            bullet[1] += bullet[3]
+            bullet[4] -= 1
             if bullet[0] < 0 or bullet[0] > WIDTH or bullet[1] < 0 or bullet[1] > HEIGHT or bullet[4] <= 0:
                 self.bullets.remove(bullet)
 
@@ -93,15 +87,14 @@ class Ball:
         self.reset()
 
     def reset(self):
-        self.x, self.y = WIDTH//2, HEIGHT//2
+        self.x, self.y = WIDTH // 2, HEIGHT // 2
         self.vx, self.vy = 0, 0
 
     def move(self):
         self.x += self.vx
         self.y += self.vy
-        self.vx *= 0.98  # Friction
-        self.vy *= 0.98  # Friction
-
+        self.vx *= 0.98
+        self.vy *= 0.98
         if self.x - BALL_SIZE < 0 or self.x + BALL_SIZE > WIDTH:
             self.vx *= -1
         if self.y - BALL_SIZE < 0 or self.y + BALL_SIZE > HEIGHT:
@@ -114,16 +107,18 @@ class Ball:
             self.vy = (self.y - player.y) / distance * BALL_SPEED
 
 # Initialize objects
-player1 = Player(100, HEIGHT//2, RED, {'up': pygame.K_w, 'down': pygame.K_s, 'left': pygame.K_a, 'right': pygame.K_d, 'shoot': pygame.K_f})
-player2 = Player(700, HEIGHT//2, BLUE, {'up': pygame.K_UP, 'down': pygame.K_DOWN, 'left': pygame.K_LEFT, 'right': pygame.K_RIGHT, 'shoot': pygame.K_RSHIFT})
+player1 = Player(100, HEIGHT // 2, RED, {'up': pygame.K_w, 'down': pygame.K_s, 'left': pygame.K_a, 'right': pygame.K_d, 'shoot': pygame.K_f})
+player2 = Player(700, HEIGHT // 2, BLUE, {'up': pygame.K_UP, 'down': pygame.K_DOWN, 'left': pygame.K_LEFT, 'right': pygame.K_RIGHT, 'shoot': pygame.K_RSHIFT})
 ball = Ball()
+
+# Streamlit UI
+st.title("2D Soccer Shooter Game")
+st.write("Use W, A, S, D for Player 1 and Arrow keys for Player 2. Press F and RShift to shoot.")
 
 # Game loop
 running = True
-clock = pygame.time.Clock()
 while running:
     screen.fill(GREEN)
-    
     keys = pygame.key.get_pressed()
     player1.move(keys)
     player2.move(keys)
@@ -133,33 +128,35 @@ while running:
     player2.update_reload()
     player1.update_bullets()
     player2.update_bullets()
-
     if keys[player1.controls['shoot']]:
         player1.shoot()
     if keys[player2.controls['shoot']]:
         player2.shoot()
-
     ball.move()
     ball.check_collision(player1)
     ball.check_collision(player2)
-
+    
+    # Draw objects
     pygame.draw.circle(screen, RED, (player1.x, player1.y), PLAYER_SIZE)
     pygame.draw.circle(screen, BLUE, (player2.x, player2.y), PLAYER_SIZE)
     pygame.draw.circle(screen, WHITE, (int(ball.x), int(ball.y)), BALL_SIZE)
+    for bullet in player1.bullets:
+        pygame.draw.circle(screen, RED, (int(bullet[0]), int(bullet[1])), BULLET_SIZE)
+    for bullet in player2.bullets:
+        pygame.draw.circle(screen, BLUE, (int(bullet[0]), int(bullet[1])), BULLET_SIZE)
 
-    # Bullet Collision Handling
-    for bullet1 in player1.bullets[:]:
-        for bullet2 in player2.bullets[:]:
-            if math.hypot(bullet1[0] - bullet2[0], bullet1[1] - bullet2[1]) < BULLET_SIZE * 2:
-                if bullet_distance(bullet1) > bullet_distance(bullet2):
-                    player2.bullets.remove(bullet2)
-                else:
-                    player1.bullets.remove(bullet1)
-
+    # Goal Detection
+    if ball.x - BALL_SIZE <= 10 and HEIGHT // 2 - GOAL_HEIGHT // 2 <= ball.y <= HEIGHT // 2 + GOAL_HEIGHT // 2:
+        player2.score += 1
+        ball.reset()
+    if ball.x + BALL_SIZE >= WIDTH - 10 and HEIGHT // 2 - GOAL_HEIGHT // 2 <= ball.y <= HEIGHT // 2 + GOAL_HEIGHT // 2:
+        player1.score += 1
+        ball.reset()
+    
+    if player1.score >= WINNING_SCORE or player2.score >= WINNING_SCORE:
+        running = False
+    
     pygame.display.flip()
     clock.tick(60)
 
-    if score_p1 >= WIN_SCORE or score_p2 >= WIN_SCORE:
-        st.success(f"Player {1 if score_p1 >= WIN_SCORE else 2} wins!")
-        pygame.quit()
-        break
+st.write(f"Final Score: P1 {player1.score} - {player2.score} P2")
