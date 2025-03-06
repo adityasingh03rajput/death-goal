@@ -1,144 +1,132 @@
-import pygame
-import math
-import time
-import os
+import streamlit as st
+import threading
 
-# Initialize Pygame
-pygame.init()
+def run_arcade_game():
+    import arcade
+    import math
+    import random
 
-# Constants
-WIDTH, HEIGHT = 800, 500
-PLAYER_SIZE = 20
-BALL_SIZE = 15
-BULLET_SIZE = 5
-PLAYER_SPEED = 4
-BULLET_SPEED = 6
-MAX_BULLETS = 6
-GOAL_WIDTH = 100
-GOAL_HEIGHT = 120
-HEALTH = 100
-BALL_SPEED = 3
-BULLET_LIFETIME = 50
-WINNING_SCORE = 5
+    # Constants
+    WIDTH, HEIGHT = 800, 500
+    PLAYER_SIZE = 20
+    BALL_SIZE = 15
+    BULLET_SIZE = 5
+    PLAYER_SPEED = 4
+    BULLET_SPEED = 6
+    MAX_BULLETS = 6
+    GOAL_WIDTH = 100
+    GOAL_HEIGHT = 120
+    HEALTH = 100
+    BALL_SPEED = 3
+    FRICTION = 0.98
+    AI_REACTION_TIME = 15
+    MIN_BALL_SPEED = 0.5
 
-# Colors
-WHITE = (255, 255, 255)
-GREEN = (0, 128, 0)
-RED = (255, 0, 0)
-BLUE = (0, 0, 255)
-BLACK = (0, 0, 0)
+    class SoccerShooter(arcade.Window):
+        def __init__(self):
+            super().__init__(WIDTH, HEIGHT, "Arcade Soccer Shooter")
+            self.players = []
+            self.ball = None
+            self.score_p1 = 0
+            self.score_p2 = 0
+            self.paused = False
+            self.ai_timer = 0
+            arcade.set_background_color(arcade.color.GREEN)
 
-# Pygame setup
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Web Soccer Shooter")
-clock = pygame.time.Clock()
+        def setup(self):
+            self.players = [
+                {'x': 100, 'y': HEIGHT // 2, 'color': arcade.color.RED, 'health': HEALTH,
+                 'bullets': [], 'angle': 0, 'is_ai': False},
+                {'x': 700, 'y': HEIGHT // 2, 'color': arcade.color.BLUE, 'health': HEALTH,
+                 'bullets': [], 'angle': 0, 'is_ai': True}
+            ]
+            self.ball = {'x': WIDTH // 2, 'y': HEIGHT // 2,
+                         'vx': random.uniform(-BALL_SPEED, BALL_SPEED),
+                         'vy': random.uniform(-BALL_SPEED, BALL_SPEED)}
 
-# Player Class
-class Player:
-    def __init__(self, x, y, color, controls):
-        self.x, self.y = x, y
-        self.color = color
-        self.bullets = []
-        self.controls = controls
-        self.health = HEALTH
-        self.angle = 0
-        self.reload = 0
-        self.score = 0
+        def on_draw(self):
+            arcade.start_render()
+            for player in self.players:
+                arcade.draw_circle_filled(player['x'], player['y'], PLAYER_SIZE, player['color'])
+                for bullet in player['bullets']:
+                    arcade.draw_circle_filled(bullet[0], bullet[1], BULLET_SIZE, arcade.color.YELLOW)
+            arcade.draw_circle_filled(self.ball['x'], self.ball['y'], BALL_SIZE, arcade.color.WHITE)
 
-    def move(self, keys):
-        if keys[self.controls['up']] and self.y > 0:
-            self.y -= PLAYER_SPEED
-        if keys[self.controls['down']] and self.y < HEIGHT:
-            self.y += PLAYER_SPEED
-        if keys[self.controls['left']] and self.x > 0:
-            self.x -= PLAYER_SPEED
-        if keys[self.controls['right']] and self.x < WIDTH:
-            self.x += PLAYER_SPEED
+        def update(self, delta_time):
+            if self.paused:
+                return
+            for player in self.players:
+                self.update_bullets(player)
+            self.update_ball()
+            if self.players[1]['is_ai']:
+                self.ai_control(self.players[1], self.ball)
 
-    def auto_aim(self, target):
-        dx = target.x - self.x
-        dy = target.y - self.y
-        self.angle = math.degrees(math.atan2(dy, dx))
+        def update_ball(self):
+            self.ball['x'] += self.ball['vx']
+            self.ball['y'] += self.ball['vy']
+            self.ball['vx'] *= FRICTION
+            self.ball['vy'] *= FRICTION
 
-    def shoot(self):
-        if len(self.bullets) < MAX_BULLETS and self.reload == 0:
-            rad = math.radians(self.angle)
-            vx = BULLET_SPEED * math.cos(rad)
-            vy = BULLET_SPEED * math.sin(rad)
-            self.bullets.append([self.x, self.y, vx, vy, BULLET_LIFETIME])
-            self.reload = 20
+            if abs(self.ball['vx']) < MIN_BALL_SPEED:
+                self.ball['vx'] = MIN_BALL_SPEED if self.ball['vx'] > 0 else -MIN_BALL_SPEED
+            if abs(self.ball['vy']) < MIN_BALL_SPEED:
+                self.ball['vy'] = MIN_BALL_SPEED if self.ball['vy'] > 0 else -MIN_BALL_SPEED
 
-    def update_bullets(self):
-        for bullet in self.bullets[:]:
-            bullet[0] += bullet[2]
-            bullet[1] += bullet[3]
-            bullet[4] -= 1
-            if bullet[0] < 0 or bullet[0] > WIDTH or bullet[1] < 0 or bullet[1] > HEIGHT or bullet[4] <= 0:
-                self.bullets.remove(bullet)
+            if self.ball['x'] - BALL_SIZE < 0 or self.ball['x'] + BALL_SIZE > WIDTH:
+                self.ball['vx'] *= -1
+            if self.ball['y'] - BALL_SIZE < 0 or self.ball['y'] + BALL_SIZE > HEIGHT:
+                self.ball['vy'] *= -1
 
-    def update_reload(self):
-        if self.reload > 0:
-            self.reload -= 1
+        def update_bullets(self, player):
+            for bullet in player['bullets'][:]:
+                bullet[0] += bullet[2]
+                bullet[1] += bullet[3]
 
-# Ball Class
-class Ball:
-    def __init__(self):
-        self.reset()
+                if bullet[0] < 0 or bullet[0] > WIDTH or bullet[1] < 0 or bullet[1] > HEIGHT:
+                    player['bullets'].remove(bullet)
 
-    def reset(self):
-        self.x, self.y = WIDTH // 2, HEIGHT // 2
-        self.vx, self.vy = 0, 0
+        def ai_control(self, ai, ball):
+            if self.ai_timer % AI_REACTION_TIME == 0:
+                if ball['x'] > ai['x']:
+                    ai['x'] += PLAYER_SPEED
+                elif ball['x'] < ai['x']:
+                    ai['x'] -= PLAYER_SPEED
+                if ball['y'] > ai['y']:
+                    ai['y'] += PLAYER_SPEED
+                elif ball['y'] < ai['y']:
+                    ai['y'] -= PLAYER_SPEED
+                self.auto_aim(ai, ball)
+                self.shoot(ai)
+            self.ai_timer += 1
 
-    def move(self):
-        self.x += self.vx
-        self.y += self.vy
-        self.vx *= 0.98
-        self.vy *= 0.98
-        if self.x - BALL_SIZE < 0 or self.x + BALL_SIZE > WIDTH:
-            self.vx *= -1
-        if self.y - BALL_SIZE < 0 or self.y + BALL_SIZE > HEIGHT:
-            self.vy *= -1
+        def auto_aim(self, player, target):
+            dx = target['x'] - player['x']
+            dy = target['y'] - player['y']
+            player['angle'] = math.degrees(math.atan2(dy, dx))
 
-    def check_collision(self, player):
-        distance = math.hypot(self.x - player.x, self.y - player.y)
-        if distance < PLAYER_SIZE + BALL_SIZE and distance != 0:
-            self.vx = (self.x - player.x) / distance * BALL_SPEED
-            self.vy = (self.y - player.y) / distance * BALL_SPEED
+        def shoot(self, player):
+            if len(player['bullets']) < MAX_BULLETS:
+                rad = math.radians(player['angle'])
+                vx = BULLET_SPEED * math.cos(rad)
+                vy = BULLET_SPEED * math.sin(rad)
+                player['bullets'].append([player['x'], player['y'], vx, vy])
 
-# Initialize objects
-player1 = Player(100, HEIGHT // 2, RED, {'up': pygame.K_w, 'down': pygame.K_s, 'left': pygame.K_a, 'right': pygame.K_d, 'shoot': pygame.K_f})
-player2 = Player(700, HEIGHT // 2, BLUE, {'up': pygame.K_UP, 'down': pygame.K_DOWN, 'left': pygame.K_LEFT, 'right': pygame.K_RIGHT, 'shoot': pygame.K_RSHIFT})
-ball = Ball()
+        def on_key_press(self, key, modifiers):
+            if key == arcade.key.P:
+                self.paused = not self.paused
+            if key == arcade.key.F:
+                self.shoot(self.players[0])
 
-# Game loop
-running = True
-while running:
-    screen.fill(GREEN)
-    keys = pygame.key.get_pressed()
-    player1.move(keys)
-    player2.move(keys)
-    player1.auto_aim(player2)
-    player2.auto_aim(player1)
-    player1.update_reload()
-    player2.update_reload()
-    player1.update_bullets()
-    player2.update_bullets()
-    if keys[player1.controls['shoot']]:
-        player1.shoot()
-    if keys[player2.controls['shoot']]:
-        player2.shoot()
-    ball.move()
-    ball.check_collision(player1)
-    ball.check_collision(player2)
-    
-    # Draw objects
-    pygame.draw.circle(screen, RED, (player1.x, player1.y), PLAYER_SIZE)
-    pygame.draw.circle(screen, BLUE, (player2.x, player2.y), PLAYER_SIZE)
-    pygame.draw.circle(screen, WHITE, (int(ball.x), int(ball.y)), BALL_SIZE)
-    for bullet in player1.bullets:
-        pygame.draw.circle(screen, RED, (int(bullet[0]), int(bullet[1])), BULLET_SIZE)
-    for bullet in player2.bullets:
-        pygame.draw.circle(screen, BLUE, (int(bullet[0]), int(bullet[1])), BULLET_SIZE)
+    game = SoccerShooter()
+    game.setup()
+    arcade.run()
 
-    pygame.display.flip()
-    clock.tick(60)
+# Streamlit interface
+st.title("Arcade Soccer Shooter via Streamlit")
+st.write("Click the button below to launch the Arcade Soccer Shooter game.")
+
+if st.button("Launch Game"):
+    # Run the arcade game in a separate thread so it doesn't block Streamlit
+    thread = threading.Thread(target=run_arcade_game, daemon=True)
+    thread.start()
+    st.write("Game launched! Check your desktop for the game window.")
