@@ -1,7 +1,9 @@
 import pygame
 import math
+import time
+import os
 
-# Initialize pygame
+# Initialize Pygame
 pygame.init()
 
 # Constants
@@ -25,11 +27,10 @@ GREEN = (0, 128, 0)
 RED = (255, 0, 0)
 BLUE = (0, 0, 255)
 BLACK = (0, 0, 0)
-YELLOW = (255, 255, 0)
 
 # Pygame setup
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("2D Soccer Shooter")
+pygame.display.set_caption("Web Soccer Shooter")
 clock = pygame.time.Clock()
 
 # Player Class
@@ -43,27 +44,16 @@ class Player:
         self.angle = 0
         self.reload = 0
         self.score = 0
-        self.vx, self.vy = 0, 0
 
     def move(self, keys):
-        ax, ay = 0, 0  # Acceleration components
-        if keys[self.controls['up']]: ay -= 1
-        if keys[self.controls['down']]: ay += 1
-        if keys[self.controls['left']]: ax -= 1
-        if keys[self.controls['right']]: ax += 1
-        
-        # Apply movement smoothly
-        self.vx += ax * 0.5
-        self.vy += ay * 0.5
-        self.vx *= 0.9  # Friction
-        self.vy *= 0.9  
-
-        self.x += self.vx
-        self.y += self.vy
-
-        # Boundary restrictions
-        self.x = max(PLAYER_SIZE, min(WIDTH - PLAYER_SIZE, self.x))
-        self.y = max(PLAYER_SIZE, min(HEIGHT - PLAYER_SIZE, self.y))
+        if keys[self.controls['up']] and self.y > 0:
+            self.y -= PLAYER_SPEED
+        if keys[self.controls['down']] and self.y < HEIGHT:
+            self.y += PLAYER_SPEED
+        if keys[self.controls['left']] and self.x > 0:
+            self.x -= PLAYER_SPEED
+        if keys[self.controls['right']] and self.x < WIDTH:
+            self.x += PLAYER_SPEED
 
     def auto_aim(self, target):
         dx = target.x - self.x
@@ -120,25 +110,8 @@ player1 = Player(100, HEIGHT // 2, RED, {'up': pygame.K_w, 'down': pygame.K_s, '
 player2 = Player(700, HEIGHT // 2, BLUE, {'up': pygame.K_UP, 'down': pygame.K_DOWN, 'left': pygame.K_LEFT, 'right': pygame.K_RIGHT, 'shoot': pygame.K_RSHIFT})
 ball = Ball()
 
-# Game loop control
-running = False
-
-# Start screen
-screen.fill(BLACK)
-font = pygame.font.Font(None, 50)
-text = font.render("Press ENTER to Start", True, WHITE)
-screen.blit(text, (WIDTH // 2 - 150, HEIGHT // 2))
-pygame.display.flip()
-
-while not running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            pygame.quit()
-            exit()
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
-            running = True
-
-# Main Game Loop
+# Game loop
+running = True
 while running:
     screen.fill(GREEN)
     keys = pygame.key.get_pressed()
@@ -150,33 +123,22 @@ while running:
     player2.update_reload()
     player1.update_bullets()
     player2.update_bullets()
-    if keys[player1.controls['shoot']]: player1.shoot()
-    if keys[player2.controls['shoot']]: player2.shoot()
+    if keys[player1.controls['shoot']]:
+        player1.shoot()
+    if keys[player2.controls['shoot']]:
+        player2.shoot()
     ball.move()
     ball.check_collision(player1)
     ball.check_collision(player2)
-
-    # Draw players and bullets
-    pygame.draw.circle(screen, RED, (int(player1.x), int(player1.y)), PLAYER_SIZE)
-    pygame.draw.circle(screen, BLUE, (int(player2.x), int(player2.y)), PLAYER_SIZE)
+    
+    # Draw objects
+    pygame.draw.circle(screen, RED, (player1.x, player1.y), PLAYER_SIZE)
+    pygame.draw.circle(screen, BLUE, (player2.x, player2.y), PLAYER_SIZE)
     pygame.draw.circle(screen, WHITE, (int(ball.x), int(ball.y)), BALL_SIZE)
     for bullet in player1.bullets:
         pygame.draw.circle(screen, RED, (int(bullet[0]), int(bullet[1])), BULLET_SIZE)
     for bullet in player2.bullets:
         pygame.draw.circle(screen, BLUE, (int(bullet[0]), int(bullet[1])), BULLET_SIZE)
 
-    # Goal Detection
-    if ball.x - BALL_SIZE <= 10 and HEIGHT // 2 - GOAL_HEIGHT // 2 <= ball.y <= HEIGHT // 2 + GOAL_HEIGHT // 2:
-        player2.score += 1
-        ball.reset()
-    if ball.x + BALL_SIZE >= WIDTH - 10 and HEIGHT // 2 - GOAL_HEIGHT // 2 <= ball.y <= HEIGHT // 2 + GOAL_HEIGHT // 2:
-        player1.score += 1
-        ball.reset()
-    
-    if player1.score >= WINNING_SCORE or player2.score >= WINNING_SCORE:
-        running = False
-    
     pygame.display.flip()
     clock.tick(60)
-
-pygame.quit()
