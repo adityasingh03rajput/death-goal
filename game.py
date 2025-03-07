@@ -1,13 +1,24 @@
 import streamlit as st
-import streamlit.components.v1 as components
+import subprocess
+import os
+
+# Streamlit App
+def main():
+    st.title("Soccer Shooter Game")
+
+    if st.button("Start Game"):
+        st.write("Launching the game in a new browser tab...")
+        run_game()
+
+# Function to run the Pygame game using pygbag
+def run_game():
+    # Write the Pygame game code to a temporary file
+    with open("game.py", "w") as f:
+        f.write("""
 import pygame
 import math
 import random
-import threading
-import time
-import subprocess  # Import subprocess for pygbag
 
-print("welcome to the game")
 # Constants
 WIDTH, HEIGHT = 800, 600
 WHITE = (255, 255, 255)
@@ -300,7 +311,7 @@ while running:
         score_text = font.render(f"Score: {player.score}", True, WHITE)
         screen.blit(score_text, (player.x - 20, player.y - 45))
     for player in players:
-        for bullet in player.bullets :
+        for bullet in player.bullets:
             pygame.draw.circle(screen, bullet.color, (int(bullet.x), int(bullet.y)), bullet.radius)
 
     pygame.draw.circle(screen, ball.color, (int(ball.x), int(ball.y)), ball.radius)
@@ -309,143 +320,11 @@ while running:
 
     pygame.display.flip()
 pygame.quit()
+""")
 
+    # Run the game using pygbag
+    subprocess.run(["pygbag", "game.py"])
 
-def run_game():
-    # Run the Pygame loop in a separate thread
-    def pygame_thread():
-        global running
-        running = True
-        while running:
-            # Reinitialize pygame inside the thread
-            screen = pygame.display.set_mode((WIDTH, HEIGHT))
-            pygame.display.set_caption("Soccer Shooter Game")
-            clock = pygame.time.Clock()
-            font = pygame.font.Font(None, 24)
-            players = [
-                Player(100, HEIGHT // 2, BLUE, {'left': pygame.K_a, 'right': pygame.K_d, 'up': pygame.K_w, 'down': pygame.K_s, 'shoot': pygame.K_SPACE}, AUTO_AIM_PLAYER),
-                Player(WIDTH - 100, HEIGHT // 2, RED, {'left': pygame.K_LEFT, 'right': pygame.K_RIGHT, 'up': pygame.K_UP, 'down': pygame.K_DOWN, 'shoot': pygame.K_RETURN}, AUTO_AIM_BALL)
-            ]
-            ball = Ball(WIDTH // 2, HEIGHT // 2, YELLOW)
-            goalposts = [pygame.Rect(0, HEIGHT // 3, 10, HEIGHT // 3), pygame.Rect(WIDTH - 10, HEIGHT // 3, 10, HEIGHT // 3)]
-
-            while running:
-                clock.tick(60)
-                screen.fill(BLACK)
-
-                # Help Caption (Auto-Aim Only)
-                help_text = [
-                    "Auto-Aim Controls:",
-                    "Player 1 (Blue):",
-                    "  1: No Auto-Aim",
-                    "  2: Aim Player",
-                    "  3: Aim Ball",
-                    "Player 2 (Red):",
-                    "  4: No Auto-Aim",
-                    "  5: Aim Player",
-                    "  6: Aim Ball"
-                ]
-
-                y_offset = 10
-                for line in help_text:
-                    text_surface = font.render(line, True, WHITE)
-                    screen.blit(text_surface, (10, y_offset))
-                    y_offset += 20
-
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        running = False
-                    if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_SPACE:
-                            players[0].shoot((players[1].x, players[1].y), ball_pos=(ball.x, ball.y), players=players)
-                        if event.key == pygame.K_RETURN:
-                            players[1].shoot((players[0].x, players[0].y), ball_pos=(ball.x, ball.y), players=players)
-                        if event.key == pygame.K_1:
-                            players[0].auto_aim = NO_AUTO_AIM
-                        if event.key == pygame.K_2:
-                            players[0].auto_aim = AUTO_AIM_PLAYER
-                        if event.key == pygame.K_3:
-                            players[0].auto_aim = AUTO_AIM_BALL
-                        if event.key == pygame.K_4:
-                            players[1].auto_aim = NO_AUTO_AIM
-                        if event.key == pygame.K_5:
-                            players[1].auto_aim = AUTO_AIM_PLAYER
-                        if event.key == pygame.K_6:
-                            players[1].auto_aim = AUTO_AIM_BALL
-
-                for i, player in enumerate(players):
-                    player.move()
-                    ball.collide(player)
-                    for j in range(i + 1, len(players)):
-                        player2 = players[j]
-                        if player.radius + player2.radius > math.sqrt((player.x - player2.x)**2 + (player.y - player2.y)**2):
-                            player.player_collide(player2)
-
-                all_bullets = players[0].bullets[:] + players[1].bullets[:]
-
-                for i, bullet1 in enumerate(all_bullets):
-                    for j in range(i + 1, len(all_bullets)):
-                        bullet2 = all_bullets[j]
-                        if bullet1.radius + bullet2.radius > math.sqrt((bullet1.x - bullet2.x)**2 + (bullet1.y - bullet2.y)**2):
-                            if bullet1.get_damage() < bullet2.get_damage():
-                                for p in players:
-                                    if bullet1 in p.bullets:
-                                        p.bullets.remove(bullet1)
-                            else:
-                                for p in players:
-                                    if bullet2 in p.bullets:
-                                        p.bullets.remove(bullet2)
-
-                for player in players:
-                    for bullet in player.bullets[:]:
-                        bullet.move()
-                        for other_player in players:
-                            if other_player != player and bullet.radius + other_player.radius > math.sqrt((bullet.x - other_player.x)**2 + (bullet.y - other_player.y)**2):
-                                damage = bullet.get_damage()
-                                other_player.health -= damage
-                                player.bullets.remove(bullet)
-                                if other_player.health <= 0:
-                                    other_player.frozen = FREEZE_TIME
-                        ball.collide(bullet)
-
-                ball.move()
-
-                for idx, goal in enumerate(goalposts):
-                    if goal.colliderect(pygame.Rect(ball.x - ball.radius, ball.y - ball.radius, ball.radius * 2, ball.radius * 2)):
-                        players[idx ^ 1].score += 1
-                        ball.x, ball.y = WIDTH // 2, HEIGHT // 2
-                        ball.velocity = [0, 0]
-                        if players[idx ^ 1].score >= GOAL_SCORE:
-                            winner_text = font.render(f"Player {idx ^ 1 + 1} wins!", True, WHITE)
-                            winner_rect = winner_text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
-                            screen.blit(winner_text, winner_rect)
-                            pygame.display.flip()
-                            pygame.time.delay(3000)
-                            running = False
-
-                for player in players:
-                    pygame.draw.circle(screen, player.color, (int(player.x), int(player.y)), player.radius)
-                    pygame.draw.rect(screen, RED, (player.x - 20, player.y - 30, 40, 5))
-                    pygame.draw.rect(screen, GREEN, (player.x - 20, player.y - 30, int(40 * player.health / player.max_health), 5))
-                    score_text = font.render(f"Score: {player.score}", True, WHITE)
-                    screen.blit(score_text, (player.x - 20, player.y - 45))
-                for player in players:
-                    for bullet in player.bullets:
-                        pygame.draw.circle(screen, bullet.color, (int(bullet.x), int(bullet.y)), bullet.radius)
-
-                pygame.draw.circle(screen, ball.color, (int(ball.x), int(ball.y)), ball.radius)
-                for goal in goalposts:
-                    pygame.draw.rect(screen, WHITE, goal)
-
-                pygame.display.flip()
-            pygame.quit()
-
-    # Start the Pygame thread
-    thread = threading.Thread(target=pygame_thread)
-    thread.start()
-
+# Run the Streamlit app
 if __name__ == "__main__":
-    st.title("Ball Game")
-
-    if st.button("Start Game"):
-        run_game()
+    main()
