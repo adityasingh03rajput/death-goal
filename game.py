@@ -289,5 +289,10 @@ def main():
 
     pygame.quit()
 
-if __name__ == "__main__":
+def run_game():
     main()
+
+if __name__ == "__main__":
+    st.title("Ball Game")
+    if st.button("Start Game"):
+        run_game()
