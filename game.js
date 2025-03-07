@@ -179,31 +179,6 @@ const goalposts = [
 
 // Key State
 const keys = {};
-document.addEventListener("keydown", (e) => (keys[e.code] = true));
-document.addEventListener("keyup", (e) => (keys[e.code] = false));
 
-// Game Loop
-function gameLoop() {
-  ctx.clearRect(0, 0, WIDTH, HEIGHT);
-
-  // Update and draw players
-  for (const player of players) {
-    player.move();
-    player.draw();
-  }
-
-  // Update and draw ball
-  ball.move();
-  ball.draw();
-
-  // Draw goalposts
-  for (const goal of goalposts) {
-    ctx.fillStyle = WHITE;
-    ctx.fillRect(goal.x, goal.y, goal.width, goal.height);
-  }
-
-  requestAnimationFrame(gameLoop);
-}
-
-// Start Game
-gameLoop();
+// Touch Controls
+document
