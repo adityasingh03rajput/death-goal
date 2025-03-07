@@ -7,6 +7,7 @@ import threading
 import time
 import subprocess  # Import subprocess for pygbag
 
+print("welcome to the game")
 # Constants
 WIDTH, HEIGHT = 800, 600
 WHITE = (255, 255, 255)
